@@ -71,7 +71,7 @@ RUN for i in 1 2 3 4 5 6 7 8 9 10; do \
     npx esbuild worker/index.ts \
       --bundle --platform=node --target=node20 \
       --outfile=worker.js \
-      --external:argon2 --external:@prisma/client \
+      --external:bcryptjs --external:@prisma/client \
       --external:pino --external:pino-pretty \
       --external:bullmq --external:ioredis
 
@@ -97,7 +97,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_module
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
 COPY --from=builder --chown=nextjs:nodejs /app/worker.js ./worker.js
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/argon2 ./node_modules/argon2
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bullmq ./node_modules/bullmq
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ioredis ./node_modules/ioredis
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pino ./node_modules/pino
