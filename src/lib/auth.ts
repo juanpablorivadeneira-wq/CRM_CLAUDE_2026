@@ -4,6 +4,7 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/password';
 import { z } from 'zod';
+import { authConfig } from './auth.config';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -12,12 +13,8 @@ const loginSchema = z.object({
 });
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   adapter: PrismaAdapter(db) as any,
-  session: { strategy: 'jwt' },
-  pages: {
-    signIn: '/login',
-    error: '/login',
-  },
   providers: [
     Credentials({
       name: 'credentials',
@@ -47,10 +44,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const valid = await verifyPassword(password, user.passwordHash);
         if (!valid) return null;
 
-        // 2FA: si está activado, exigir código TOTP
         if (user.twoFactorEnabled) {
           if (!totpCode) {
-            // Señal especial al cliente para mostrar campo de 2FA
             throw new Error('2FA_REQUIRED');
           }
           const { authenticator } = await import('otplib');
@@ -62,7 +57,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (!isValid) throw new Error('INVALID_2FA_CODE');
         }
 
-        // Registrar último login
         await db.user.update({
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
@@ -76,28 +70,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           orgId: user.orgId,
           orgSlug: user.org.slug,
           orgName: user.org.name,
-        };
+        } as any;
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.orgId = (user as any).orgId;
-        token.orgSlug = (user as any).orgSlug;
-        token.orgName = (user as any).orgName;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id as string;
-        (session as any).orgId = token.orgId;
-        (session as any).orgSlug = token.orgSlug;
-        (session as any).orgName = token.orgName;
-      }
-      return session;
-    },
-  },
 });
