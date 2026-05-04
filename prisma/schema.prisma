@@ -1,0 +1,843 @@
+// =============================================================================
+// BK-CRM — Prisma Schema
+// PostgreSQL 16 · Prisma 6
+//
+// Decisiones de arquitectura implementadas:
+//   1. Multi-tenant: toda tabla de dominio tiene orgId; RLS en postgres.
+//   2. Actor en todo registro (human | ai | system) — listo para agente IA.
+//   3. Tabla Message unificada por canal — no Activity hardcodeada.
+//   4. CalendarService data model — vendedores + disponibilidad + appointments.
+//   5. Funnels y etapas como datos (PipelineStage, StageRule) — no código.
+//   6. Project.aiMode — off por defecto, autonomous cuando llegue la IA.
+//   7. Tablas AgentRun, AiUsageMeter, HandoffRule — vacías hasta Fase 7.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum ActorType {
+  human
+  ai
+  system
+}
+
+enum OrgPlan {
+  trial
+  starter
+  pro
+  enterprise
+}
+
+enum OrgStatus {
+  active
+  suspended
+  cancelled
+}
+
+enum UserStatus {
+  active
+  inactive
+  pending_verification
+}
+
+enum PermissionAction {
+  ver
+  crear
+  editar
+  eliminar
+  aprobar
+  exportar
+}
+
+enum BusinessLine {
+  real_estate    // Proyectos inmobiliarios (Arandá, conjuntos, etc.)
+  design         // Proyectos de diseño (interiorismo, arquitectónico)
+  construction   // Construcción a la medida / remodelación
+}
+
+enum ProjectStatus {
+  active
+  paused
+  sold_out
+  cancelled
+}
+
+enum AiMode {
+  off               // Sin IA (default)
+  assistant         // Sugiere; humano aprueba
+  copilot           // Responde y notifica; humano puede sobrescribir
+  supervised        // Responde y envía; humano revisa después
+  autonomous        // Totalmente autónomo; humano entra solo en handoff
+}
+
+enum ClientType {
+  person
+  company
+}
+
+enum LeadOrigin {
+  meta_ads
+  web_form
+  referral
+  trade_show
+  cold_call
+  whatsapp_inbound
+  walk_in
+  other
+}
+
+enum OpportunityStatus {
+  open
+  won
+  lost
+  paused
+}
+
+enum MessageChannel {
+  whatsapp
+  email
+  sms
+  call
+  in_app
+  meeting
+  note
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+  internal
+}
+
+enum AppointmentType {
+  phone_call
+  video_call
+  office_visit
+  site_visit
+  client_office
+  technical_visit
+}
+
+enum AppointmentStatus {
+  tentative
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+enum HandoffReason {
+  negotiation_requested
+  high_intent_detected
+  stage_threshold
+  frustration_detected
+  human_requested_by_lead
+  low_confidence
+  manual
+}
+
+enum AuditAction {
+  create
+  update
+  delete
+  approve
+  reject
+  export
+  login
+  logout
+  handoff
+  ai_action
+}
+
+// =============================================================================
+// MULTI-TENANT: Organization
+// =============================================================================
+
+model Organization {
+  id           String    @id @default(cuid())
+  slug         String    @unique // subdominio: arquetika.bk-crm.com
+  name         String
+  plan         OrgPlan   @default(trial)
+  status       OrgStatus @default(active)
+
+  // Branding (white-label)
+  logoUrl      String?
+  primaryColor String?   @default("#3F51B5")
+  accentColor  String?   @default("#7E57C2")
+
+  // Config
+  locale       String    @default("es")
+  timezone     String    @default("America/Guayaquil")
+  customDomain String?   @unique
+
+  // Límites por plan
+  maxUsers     Int       @default(5)
+  maxProjects  Int       @default(3)
+  aiEnabled    Boolean   @default(false)
+
+  trialEndsAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relaciones
+  users          User[]
+  roles          Role[]
+  projects       Project[]
+  projectTypes   ProjectType[]
+  clients        Client[]
+  opportunities  Opportunity[]
+  auditLogs      AuditLog[]
+  aiUsage        AiUsageMeter[]
+  webhooks       Webhook[]
+  apiKeys        ApiKey[]
+  subscriptions  Subscription[]
+
+  @@map("organizations")
+}
+
+// =============================================================================
+// USUARIOS Y ROLES
+// =============================================================================
+
+model User {
+  id                   String     @id @default(cuid())
+  orgId                String
+  org                  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  email                String
+  passwordHash         String
+  name                 String
+  avatarUrl            String?
+
+  status               UserStatus @default(pending_verification)
+  emailVerifiedAt      DateTime?
+
+  // 2FA
+  twoFactorEnabled     Boolean    @default(false)
+  twoFactorSecret      String?    // TOTP secret (cifrado)
+  twoFactorBackupCodes String[]   // códigos de recuperación (hash)
+
+  // Preferencias
+  locale               String     @default("es")
+  timezone             String     @default("America/Guayaquil")
+  notifyByEmail        Boolean    @default(true)
+  notifyInApp          Boolean    @default(true)
+
+  // Horario laboral (para CalendarService)
+  workingHours         Json?      // { mon: {start:"08:00",end:"18:00"}, ... }
+  appointmentBuffer    Int        @default(15) // minutos entre citas
+
+  lastLoginAt          DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  // Relaciones
+  assignments      UserProjectAssignment[]
+  messages         Message[]            @relation("MessageSentBy")
+  appointments     Appointment[]        @relation("AppointmentVendor")
+  tasks            Task[]               @relation("TaskAssignee")
+  auditLogs        AuditLog[]
+  calendarBlocks   CalendarBlock[]
+  agentHandoffs    AgentHandoff[]
+
+  @@unique([orgId, email])
+  @@index([orgId])
+  @@map("users")
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String       // "Superadmin", "Gerente Comercial", "Vendedor", custom...
+  description String?
+  isSystem    Boolean      @default(false) // roles predefinidos no borrables
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  assignments UserProjectAssignment[]
+  permissions RolePermission[]
+
+  @@unique([orgId, name])
+  @@map("roles")
+}
+
+model RolePermission {
+  id      String           @id @default(cuid())
+  roleId  String
+  role    Role             @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  module  String           // "crm", "projects", "calendar", "reports", ...
+  action  PermissionAction
+
+  @@unique([roleId, module, action])
+  @@map("role_permissions")
+}
+
+model UserProjectAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  assignedAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+  @@map("user_project_assignments")
+}
+
+// =============================================================================
+// PROYECTOS Y TIPOS DE PROYECTO
+// =============================================================================
+
+model ProjectType {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String       // "Conjunto habitacional", "Diseño", "Construcción"...
+  businessLine BusinessLine
+  description String?
+  isActive    Boolean      @default(true)
+  isSystem    Boolean      @default(false) // tipos predefinidos
+
+  // Campos personalizados para oportunidades de este tipo
+  customFields Json?        // [{ key, label, type, required, options }]
+
+  // Documentos requeridos por etapa
+  requiredDocs Json?        // { stageId: ["Cédula", "Comprobante de ingresos"] }
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  stages    PipelineStage[]
+  projects  Project[]
+
+  @@unique([orgId, name])
+  @@map("project_types")
+}
+
+model PipelineStage {
+  id            String      @id @default(cuid())
+  projectTypeId String
+  projectType   ProjectType @relation(fields: [projectTypeId], references: [id], onDelete: Cascade)
+
+  name          String      // "Lead", "Contactado", "Visita agendada", "Reserva"...
+  order         Int
+  probability   Int         @default(0)  // % probabilidad de cierre
+  slaDays       Int?        // días máximos en esta etapa antes de alerta
+  color         String?     // para el kanban
+  isWon         Boolean     @default(false)
+  isLost        Boolean     @default(false)
+
+  // Acciones automáticas al entrar a esta etapa (Decisión 5)
+  rules         StageRule[]
+  opportunities Opportunity[]
+
+  @@unique([projectTypeId, order])
+  @@map("pipeline_stages")
+}
+
+model StageRule {
+  id      String        @id @default(cuid())
+  stageId String
+  stage   PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  // Tipo de acción automática: create_task | send_message | notify_manager | webhook
+  type    String
+  config  Json          // payload de la acción (plantilla, asignado, delay, etc.)
+
+  @@map("stage_rules")
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  orgId         String
+  org           Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  projectTypeId String
+  projectType   ProjectType   @relation(fields: [projectTypeId], references: [id])
+
+  name          String
+  businessLine  BusinessLine
+  status        ProjectStatus @default(active)
+  description   String?
+  imageUrl      String?
+  address       String?
+
+  // Precio / presupuesto referencial
+  referencePrice Float?
+
+  // Coordenadas para cálculo de traslado (CalendarService)
+  lat           Float?
+  lng           Float?
+
+  // IA (Decisión 6) — off por defecto, autonomous cuando se active
+  aiMode        AiMode        @default(off)
+  aiPersonality String?       // instrucciones del agente para este proyecto
+
+  deletedAt     DateTime?     // soft delete
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relaciones
+  assignments   UserProjectAssignment[]
+  opportunities Opportunity[]
+
+  @@index([orgId])
+  @@map("projects")
+}
+
+// =============================================================================
+// CLIENTES (Contact)
+// =============================================================================
+
+model Client {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  // Datos personales/jurídicos
+  type        ClientType   @default(person)
+  name        String
+  ci          String?      // cédula (Ecuador)
+  ruc         String?      // RUC (si es empresa)
+  email       String?
+  phone       String?
+  whatsapp    String?
+  address     String?
+  city        String?
+  profession  String?
+
+  // Origen y tracking
+  origin      LeadOrigin   @default(other)
+  originDetail String?     // ej: nombre de campaña de Meta Ads, nombre del referido
+
+  // Perfil
+  budgetMin   Float?
+  budgetMax   Float?
+  notes       String?
+  tags        String[]
+
+  avatarUrl   String?
+
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  createdById String?
+
+  opportunities Opportunity[]
+  documents     Document[]
+
+  @@index([orgId])
+  @@index([orgId, email])
+  @@map("clients")
+}
+
+// =============================================================================
+// OPORTUNIDADES (unidad de venta)
+// =============================================================================
+
+model Opportunity {
+  id            String            @id @default(cuid())
+  orgId         String
+  org           Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id])
+
+  projectId     String
+  project       Project           @relation(fields: [projectId], references: [id])
+
+  stageId       String
+  stage         PipelineStage     @relation(fields: [stageId], references: [id])
+
+  salespersonId String?
+  // (relación a User sin FK directo para evitar borrado en cascada)
+
+  status        OpportunityStatus @default(open)
+
+  // Valor
+  estimatedValue Float?
+  unitDetail     String?          // "Depto 304, Torre B" / "Casa 220m²"
+
+  // Campos personalizados del ProjectType (Decisión 5)
+  data          Json?
+
+  // Seguimiento
+  nextActionDate DateTime?
+  nextActionNote String?
+  lostReason     String?
+  wonAt          DateTime?
+
+  // IA (Decisión 6)
+  aiMode         AiMode?          // hereda del proyecto si null
+  aiContextSummary String?        // resumen que la IA usa como contexto
+
+  deletedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relaciones
+  messages      Message[]
+  tasks         Task[]
+  appointments  Appointment[]
+  documents     Document[]
+  agentRuns     AgentRun[]
+  handoffs      AgentHandoff[]
+  stageHistory  OpportunityStageHistory[]
+
+  @@index([orgId])
+  @@index([orgId, projectId])
+  @@index([orgId, stageId])
+  @@map("opportunities")
+}
+
+model OpportunityStageHistory {
+  id            String      @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  fromStageId   String?
+  toStageId     String
+  actorType     ActorType   @default(human)
+  actorId       String?
+  note          String?
+  movedAt       DateTime    @default(now())
+
+  @@map("opportunity_stage_history")
+}
+
+// =============================================================================
+// MENSAJES / ACTIVIDADES (Decisión 3 — tabla unificada por canal)
+// =============================================================================
+
+model Message {
+  id            String           @id @default(cuid())
+  orgId         String
+  opportunityId String
+  opportunity   Opportunity      @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  // Canal y dirección
+  channel       MessageChannel
+  direction     MessageDirection
+
+  // Actor (Decisión 2) — humano, IA o sistema
+  actorType     ActorType        @default(human)
+  actorId       String?          // userId si human, agentRunId si ai
+  sentById      String?
+  sentBy        User?            @relation("MessageSentBy", fields: [sentById], references: [id])
+
+  // Contenido
+  subject       String?          // para emails
+  body          String
+  bodyHtml      String?
+  attachments   Document[]
+
+  // Metadata de canal (ID externo de WhatsApp, messageId de email, etc.)
+  externalId    String?
+  metadata      Json?
+
+  // Estado de envío
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  failedAt      DateTime?
+  errorMessage  String?
+
+  createdAt     DateTime         @default(now())
+
+  @@index([opportunityId])
+  @@index([orgId, channel])
+  @@map("messages")
+}
+
+// =============================================================================
+// TAREAS Y RECORDATORIOS
+// =============================================================================
+
+model Task {
+  id            String      @id @default(cuid())
+  orgId         String
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  title         String
+  description   String?
+  dueDate       DateTime?
+  completedAt   DateTime?
+
+  // Actor (Decisión 2)
+  actorType     ActorType   @default(human)
+  createdById   String?
+  assigneeId    String?
+  assignee      User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([opportunityId])
+  @@index([assigneeId])
+  @@map("tasks")
+}
+
+// =============================================================================
+// CALENDARIO Y CITAS (Decisión 4 — CalendarService data model)
+// =============================================================================
+
+model CalendarBlock {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String?
+  startsAt    DateTime
+  endsAt      DateTime
+  isRecurring Boolean  @default(false)
+  recurrence  Json?    // rrule config
+  source      String   @default("manual") // "manual" | "google" | "outlook"
+  externalId  String?  // ID en Google/Outlook
+
+  @@index([userId, startsAt])
+  @@map("calendar_blocks")
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  orgId         String
+  opportunityId String
+  opportunity   Opportunity       @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  vendorId      String
+  vendor        User              @relation("AppointmentVendor", fields: [vendorId], references: [id])
+
+  type          AppointmentType
+  status        AppointmentStatus @default(tentative)
+
+  startsAt      DateTime
+  endsAt        DateTime
+
+  location      String?
+  lat           Float?
+  lng           Float?
+  videoUrl      String?           // link de Meet/Zoom generado automáticamente
+
+  // Actor que creó la cita (Decisión 2)
+  actorType     ActorType         @default(human)
+  actorId       String?
+
+  notes         String?
+  cancelReason  String?
+
+  // Recordatorios enviados
+  reminder24hAt DateTime?
+  reminder2hAt  DateTime?
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([opportunityId])
+  @@index([vendorId, startsAt])
+  @@map("appointments")
+}
+
+// =============================================================================
+// DOCUMENTOS (apuntan a MinIO)
+// =============================================================================
+
+model Document {
+  id            String      @id @default(cuid())
+  orgId         String
+
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  clientId      String?
+  client        Client?      @relation(fields: [clientId], references: [id])
+  messageId     String?
+  message       Message?     @relation(fields: [messageId], references: [id])
+
+  name          String
+  mimeType      String
+  sizeBytes     Int
+  bucket        String
+  key           String       // ruta en MinIO
+
+  uploadedById  String?
+  actorType     ActorType    @default(human)
+
+  createdAt     DateTime     @default(now())
+
+  @@index([orgId])
+  @@map("documents")
+}
+
+// =============================================================================
+// IA — AGENT RUNS, HANDOFFS, USAGE (Decisión 7 — vacías hasta Fase 7)
+// =============================================================================
+
+model AgentRun {
+  id            String      @id @default(cuid())
+  orgId         String
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  // Ciclo de vida
+  startedAt     DateTime    @default(now())
+  endedAt       DateTime?
+  status        String      @default("running") // running | completed | failed | handed_off
+
+  // Contenido de la ejecución
+  model         String?     // ej. "claude-sonnet-4-6"
+  inputTokens   Int         @default(0)
+  outputTokens  Int         @default(0)
+  costUsd       Float       @default(0)
+
+  // Tools usados en esta ejecución
+  toolsUsed     String[]
+  errorMessage  String?
+
+  @@index([opportunityId])
+  @@map("agent_runs")
+}
+
+model AgentHandoff {
+  id            String        @id @default(cuid())
+  orgId         String
+  opportunityId String
+  opportunity   Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  reason        HandoffReason
+  reasonDetail  String?
+  urgency       String        @default("normal") // low | normal | high | urgent
+  summary       String?       // resumen de la conv. para que el vendedor entienda
+
+  assignedToId  String?
+  assignedTo    User?         @relation(fields: [assignedToId], references: [id])
+
+  resolvedAt    DateTime?
+  resolvedById  String?
+
+  createdAt     DateTime      @default(now())
+
+  @@index([orgId, resolvedAt])
+  @@map("agent_handoffs")
+}
+
+model AiUsageMeter {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  month     String       // "2026-04"
+  tokens    Int          @default(0)
+  costUsd   Float        @default(0)
+  capUsd    Float        @default(50)
+
+  @@unique([orgId, month])
+  @@map("ai_usage_meters")
+}
+
+// =============================================================================
+// AUDIT LOG (inmutable — sin updateAt, sin deleteAt)
+// =============================================================================
+
+model AuditLog {
+  id         String       @id @default(cuid())
+  orgId      String
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  action     AuditAction
+  module     String       // "opportunity", "client", "project", "user", "ai"...
+  entityId   String?
+  entityType String?
+
+  actorType  ActorType    @default(human)
+  actorId    String?
+  actor      User?        @relation(fields: [actorId], references: [id])
+
+  before     Json?        // estado anterior
+  after      Json?        // estado posterior
+  ip         String?
+  userAgent  String?
+
+  createdAt  DateTime     @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([orgId, module, entityId])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// INTEGRACIONES: WEBHOOKS + API KEYS
+// =============================================================================
+
+model Webhook {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name      String
+  url       String
+  events    String[]     // ["opportunity.won", "appointment.created", ...]
+  secret    String       // HMAC para verificar payload
+  isActive  Boolean      @default(true)
+
+  lastPingAt     DateTime?
+  lastPingStatus Int?
+
+  createdAt DateTime     @default(now())
+
+  @@map("webhooks")
+}
+
+model ApiKey {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String
+  keyHash     String       @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean      @default(true)
+
+  createdAt   DateTime     @default(now())
+
+  @@map("api_keys")
+}
+
+// =============================================================================
+// SUSCRIPCIÓN / BILLING (placeholder — se activa en Fase 10)
+// =============================================================================
+
+model Subscription {
+  id             String       @id @default(cuid())
+  orgId          String
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  plan           OrgPlan
+  status         String       @default("trialing") // trialing | active | past_due | cancelled
+  stripeSubId    String?      @unique
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("subscriptions")
+}

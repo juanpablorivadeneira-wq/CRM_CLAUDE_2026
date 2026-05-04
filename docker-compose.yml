@@ -1,0 +1,145 @@
+# ============================================================================
+# BK-CRM — Synology (USA IMAGEN PRE-CONSTRUIDA DE GHCR.IO)
+#
+# Esta versión NO construye nada en el Synology. Solo descarga la imagen
+# que GitHub Actions ya publicó en ghcr.io.
+#
+# Variables que tienes que poner en .env:
+#   GITHUB_USER=tu-usuario-de-github
+# ============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: bkcrm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./.docker-data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bkcrm
+
+  # ---------------------------------------------------------------------------
+  # Redis 7
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: bkcrm-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./.docker-data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - bkcrm
+
+  # ---------------------------------------------------------------------------
+  # MinIO
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: bkcrm-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./.docker-data/minio:/data
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - bkcrm
+
+  # ---------------------------------------------------------------------------
+  # Web — usa imagen YA CONSTRUIDA de ghcr.io
+  # ---------------------------------------------------------------------------
+  web:
+    image: ghcr.io/${GITHUB_USER}/bk-crm-web:latest
+    container_name: bkcrm-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      ROLE: web
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - bkcrm
+
+  # ---------------------------------------------------------------------------
+  # Worker — misma imagen, comando distinto
+  # ---------------------------------------------------------------------------
+  worker:
+    image: ghcr.io/${GITHUB_USER}/bk-crm-web:latest
+    container_name: bkcrm-worker
+    restart: unless-stopped
+    command: ["node", "worker.js"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      ROLE: worker
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bkcrm
+
+  # ---------------------------------------------------------------------------
+  # Caddy
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: bkcrm-caddy
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+      - "8444:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.docker-data/caddy/data:/data
+      - ./.docker-data/caddy/config:/config
+    depends_on:
+      - web
+    networks:
+      - bkcrm
+
+networks:
+  bkcrm:
+    driver: bridge

@@ -1,0 +1,57 @@
+# ============================================================================
+# BK-CRM — Caddy reverse proxy
+#
+# Para desarrollo local: usa http://localhost
+# Para producción multi-tenant: cambia a tu dominio raíz, ej.
+#
+#   *.bk-crm.tudominio.com, bk-crm.tudominio.com {
+#       reverse_proxy web:3000
+#   }
+#
+# Caddy maneja TLS automáticamente con Let's Encrypt para dominios públicos.
+# ============================================================================
+
+{
+	# Email para los certificados de Let's Encrypt (cambiar en producción).
+	email admin@bk-crm.local
+	# Para entornos sin DNS público (Synology en LAN), usa CA local:
+	# local_certs
+}
+
+:80 {
+	encode gzip zstd
+
+	# Health check directo (antes del proxy) para los healthchecks de DSM.
+	respond /healthz "ok" 200
+
+	reverse_proxy web:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# Headers de seguridad básicos
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# HSTS solo cuando ya estés en HTTPS:
+		# Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	}
+}
+
+# ============================================================================
+# Configuración de producción multi-tenant (descomentar cuando haya dominio)
+# ============================================================================
+#
+# *.bk-crm.tudominio.com, bk-crm.tudominio.com {
+#     encode gzip zstd
+#     reverse_proxy web:3000
+#     header {
+#         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+#         X-Content-Type-Options nosniff
+#         X-Frame-Options DENY
+#         Referrer-Policy strict-origin-when-cross-origin
+#     }
+# }
