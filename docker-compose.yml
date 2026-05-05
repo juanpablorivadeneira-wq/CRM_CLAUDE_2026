@@ -73,6 +73,27 @@ services:
       - bkcrm
 
   # ---------------------------------------------------------------------------
+  # Init — corre prisma db push + seed UNA VEZ y termina.
+  # Idempotente: db push solo aplica cambios; seed esta protegido contra duplicados.
+  # web y worker esperan a que init termine OK antes de arrancar.
+  # ---------------------------------------------------------------------------
+  init:
+    image: ghcr.io/${GITHUB_USER}/bk-crm-web:latest
+    container_name: bkcrm-init
+    restart: "no"
+    command: ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && (npm run db:seed || echo 'seed ya aplicado, ignoro')"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      ROLE: init
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - bkcrm
+
+  # ---------------------------------------------------------------------------
   # Web — usa imagen YA CONSTRUIDA de ghcr.io
   # ---------------------------------------------------------------------------
   web:
@@ -91,6 +112,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 30s
@@ -118,6 +141,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
     networks:
       - bkcrm
 
