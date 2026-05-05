@@ -1,4 +1,3 @@
-import 'server-only';
 import { db } from '@/lib/db';
 import { cache } from 'react';
 import type { PermissionAction } from '@prisma/client';
