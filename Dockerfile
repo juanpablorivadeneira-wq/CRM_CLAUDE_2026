@@ -92,16 +92,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bcryptjs ./node_modules/bcryptjs
+# Copiamos node_modules COMPLETO del builder al runtime.
+# Razon: prisma CLI, tsx (seed) y sus transitivas (tslib, effect, etc.)
+# tienen un grafo profundo de dependencias. La copia selectiva siempre
+# nos dejaba alguna transitiva fuera. Esto sobre-escribe el node_modules
+# minimal del standalone de Next con el completo del build.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-
 COPY --from=builder --chown=nextjs:nodejs /app/worker.js ./worker.js
-
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tsx ./node_modules/tsx
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin ./node_modules/.bin
 COPY --from=builder --chown=nextjs:nodejs /app/src ./src
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
