@@ -64,16 +64,17 @@ COPY . .
 
 RUN npm run build
 
-# Bundle del worker BullMQ con esbuild + reintentos
+# Bundle del worker BullMQ con esbuild + reintentos.
+# Bundleamos TODAS las deps del worker (bullmq, ioredis, pino, tslib, etc.)
+# dentro de worker.js para que sea self-contained en el runner.
+# Solo @prisma/client queda external porque tiene binarios .node nativos.
 RUN for i in 1 2 3 4 5 6 7 8 9 10; do \
       npm i -D esbuild --no-save --prefer-offline --no-audit --no-fund && break || sleep 30; \
     done && \
     npx esbuild worker/index.ts \
       --bundle --platform=node --target=node20 \
       --outfile=worker.js \
-      --external:bcryptjs --external:@prisma/client \
-      --external:pino --external:pino-pretty \
-      --external:bullmq --external:ioredis
+      --external:@prisma/client
 
 # ---- 3. Runtime -------------------------------------------------------------
 FROM node:20-alpine AS runner
@@ -97,9 +98,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_module
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
 COPY --from=builder --chown=nextjs:nodejs /app/worker.js ./worker.js
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bullmq ./node_modules/bullmq
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ioredis ./node_modules/ioredis
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pino ./node_modules/pino
 
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tsx ./node_modules/tsx
 COPY --from=builder --chown=nextjs:nodejs /app/src ./src
