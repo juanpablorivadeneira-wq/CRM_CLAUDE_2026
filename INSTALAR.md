@@ -111,16 +111,26 @@ Guarda con `Ctrl+O` → Enter → `Ctrl+X`.
 > Esta vez Container Manager **NO va a construir nada**. Solo descarga la imagen
 > de ghcr.io (~250 MB en una sola descarga). Tarda 1-3 min.
 
-### 2.4. Inicializar la base de datos (solo la primera vez)
+### 2.4. Levantar todo con el script de bootstrap (recomendado)
 
-Cuando los 6 contenedores estén verdes:
+En lugar de crear el proyecto desde Container Manager, ejecuta el script desde SSH —
+es idempotente, valida tu `.env`, baja la imagen, levanta servicios, aplica el schema
+Prisma y siembra los datos en un solo paso:
 
 ```bash
 cd /volume1/docker/bk-crm
-
-docker exec bkcrm-web npx prisma db push --accept-data-loss --skip-generate
-docker exec bkcrm-web npm run db:seed
+bash scripts/synology-bootstrap.sh
 ```
+
+Verás logs por cada etapa. Al final te imprimirá las URLs de acceso y el estado de
+cada contenedor (`docker compose ps`).
+
+> Si prefieres usar Container Manager (UI), créa el proyecto como en 2.3 y luego
+> aplica solo los pasos de DB:
+> ```bash
+> docker exec bkcrm-web npx prisma db push --accept-data-loss --skip-generate
+> docker exec bkcrm-web npm run db:seed
+> ```
 
 ---
 

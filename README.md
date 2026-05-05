@@ -22,67 +22,50 @@ Gestiona el ciclo de ventas completo por línea de negocio (Inmobiliaria, Diseñ
 
 ## Despliegue en Synology DS1522+
 
-### Requisitos previos
+> **Importante:** el flujo es **pull-only**. La imagen Docker se construye en GitHub Actions
+> (workflow `Build and Push Docker Image`) y se publica en `ghcr.io`. El Synology solo descarga
+> la imagen ya construida — nunca compila local. Cero riesgo de errores de red durante build.
+>
+> Para la guía paso a paso desde cero (incluyendo cómo configurar el `.env`, hacer la imagen
+> pública o usar token de GHCR), ver [`INSTALAR.md`](./INSTALAR.md).
 
-1. **DSM 7** con Container Manager instalado.
-2. **Carpeta base** creada en el Synology:
-   ```
-   /volume1/docker/bk-crm/
-   ```
-3. Dominio o DDNS apuntando a la IP del Synology para TLS. Sin dominio, funciona por `http://IP:80` en LAN.
-
-### Paso 1 — Clonar el proyecto en el Synology
+### Resumen rápido
 
 ```bash
 ssh usuario@IP-SYNOLOGY
-cd /volume1/docker/bk-crm
-git clone https://github.com/juanpablorivadeneira-wq/crm_2026.git .
-```
-
-### Paso 2 — Crear el `.env`
-
-```bash
+sudo -i
+cd /volume1/docker
+git clone https://github.com/juanpablorivadeneira-wq/CRM_CLAUDE_2026.git bk-crm
+cd bk-crm
 cp .env.example .env
-nano .env
+nano .env                      # edita GITHUB_USER, AUTH_SECRET, passwords
+bash scripts/synology-bootstrap.sh
 ```
 
-Mínimo para arrancar:
-```env
-POSTGRES_PASSWORD=clave-segura
-MINIO_ROOT_PASSWORD=otra-clave
-AUTH_SECRET=resultado-de--openssl-rand--base64-32
-DATABASE_URL=postgresql://bkcrm:clave-segura@db:5432/bkcrm?schema=public
-```
+El script `synology-bootstrap.sh` es **idempotente** y se encarga de:
 
-### Paso 3 — Crear directorios de volúmenes
-
-```bash
-mkdir -p .docker-data/{db,redis,minio,caddy/data,caddy/config}
-```
-
-### Paso 4 — Levantar servicios
-
-```bash
-docker compose up -d
-```
-
-Primera vez tarda ~5 min (build de Next.js).
-
-### Paso 5 — Migrar DB y seedear
-
-```bash
-docker compose exec web npx prisma migrate deploy
-docker compose exec web npm run db:seed
-```
+1. Validar el `.env`.
+2. Crear los directorios persistentes (`.docker-data/{db,redis,minio,caddy}`).
+3. Hacer `docker compose pull` desde ghcr.io.
+4. Hacer `docker compose up -d` (db + redis + minio + web + worker + caddy).
+5. Aplicar el schema Prisma con `prisma db push --accept-data-loss --skip-generate`.
+6. Sembrar los datos iniciales con `npm run db:seed`.
 
 Credenciales del seed:
 - Superadmin: `admin@arquetika.com` / `Admin2026!`
 - Vendedor: `juan.morales@arquetika.com` / `Vendedor2026!`
 
-### Paso 6 — Abrir en el navegador
+### Actualizar el sistema
 
-```
-http://IP-DEL-SYNOLOGY
+```bash
+# En tu PC: push del cambio a main
+git push origin main
+# GitHub Actions reconstruye la imagen (~5-8 min)
+
+# En el Synology
+cd /volume1/docker/bk-crm
+docker compose pull
+docker compose up -d
 ```
 
 ---
@@ -109,7 +92,7 @@ docker compose logs -f web              # ver logs
 docker compose restart web              # reiniciar app
 docker compose exec web npm run prisma:studio   # visor de DB
 docker compose exec db pg_dump -U bkcrm bkcrm > backup.sql  # backup
-git pull && docker compose build web && docker compose up -d  # actualizar
+git push && docker compose pull && docker compose up -d  # actualizar (pull-only)
 ```
 
 ---
