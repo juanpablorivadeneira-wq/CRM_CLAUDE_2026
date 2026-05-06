@@ -63,9 +63,19 @@ const ADMIN_NAV: NavItem[] = [
 ];
 
 function projectNav(projectId: string): NavItem[] {
+  const base = `/projects/${projectId}`;
   return [
-    { href: `/projects/${projectId}`, icon: FileText, label: 'Resumen' },
+    { href: base, icon: FileText, label: 'Resumen' },
+    { href: `${base}/pipeline`, icon: KanbanSquare, label: 'Pipeline' },
+    { href: `${base}/clients`, icon: Users, label: 'Clientes' },
+    { href: `${base}/calendar`, icon: Calendar, label: 'Calendario' },
+    { href: `${base}/reports`, icon: BarChart3, label: 'Reportes' },
   ];
+}
+
+function projectIdFromPath(pathname: string): string | null {
+  const match = /^\/projects\/([^/]+)/.exec(pathname);
+  return match ? match[1] : null;
 }
 
 export function AppSidebar({
@@ -73,14 +83,20 @@ export function AppSidebar({
   orgSlug,
   isSuperAdmin,
   currentProject,
+  projects,
 }: {
   orgName: string;
   orgSlug: string;
   primaryColor: string;
   isSuperAdmin: boolean;
   currentProject: CurrentProject | null;
+  projects: CurrentProject[];
 }) {
   const pathname = usePathname();
+  const urlProjectId = projectIdFromPath(pathname);
+  const urlProject = urlProjectId ? projects.find((p) => p.id === urlProjectId) ?? null : null;
+  const activeProject = urlProject ?? currentProject;
+
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
@@ -130,14 +146,14 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {currentProject && (
+        {activeProject && (
           <SidebarGroup>
             <SidebarGroupLabel className="flex items-center gap-1.5">
-              <span className="truncate">En {currentProject.name}</span>
+              <span className="truncate">En {activeProject.name}</span>
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {projectNav(currentProject.id).map(({ href, icon: Icon, label }) => (
+                {projectNav(activeProject.id).map(({ href, icon: Icon, label }) => (
                   <SidebarMenuItem key={href}>
                     <SidebarMenuButton
                       asChild
