@@ -53,7 +53,7 @@ export default async function ClientDetailPage({
       opportunities: {
         where: { deletedAt: null },
         include: {
-          project: { select: { name: true } },
+          project: { select: { id: true, name: true, businessLine: true } },
           stage: { select: { name: true, isWon: true, isLost: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -62,6 +62,14 @@ export default async function ClientDetailPage({
   });
 
   if (!client || client.orgId !== ctx.orgId) notFound();
+
+  const projectsMap = new Map<string, { id: string; name: string; count: number }>();
+  for (const o of client.opportunities) {
+    const existing = projectsMap.get(o.project.id);
+    if (existing) existing.count += 1;
+    else projectsMap.set(o.project.id, { id: o.project.id, name: o.project.name, count: 1 });
+  }
+  const clientProjects = Array.from(projectsMap.values());
 
   return (
     <>
@@ -81,6 +89,27 @@ export default async function ClientDetailPage({
           <Badge variant="secondary">{ORIGIN_LABELS[client.origin]}</Badge>
         </div>
       </PageHeader>
+
+      {clientProjects.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">
+            {clientProjects.length === 1 ? 'Proyecto:' : 'Proyectos:'}
+          </span>
+          {clientProjects.map((p) => (
+            <Link
+              key={p.id}
+              href={`/projects/${p.id}`}
+              className="inline-flex items-center gap-1 rounded-full border bg-card px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+            >
+              <Building className="h-3 w-3 text-muted-foreground" />
+              <span>{p.name}</span>
+              {p.count > 1 && (
+                <span className="text-[10px] text-muted-foreground">· {p.count}</span>
+              )}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="md:col-span-1">

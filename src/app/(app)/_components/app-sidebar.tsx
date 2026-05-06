@@ -50,7 +50,6 @@ const GENERAL_NAV: NavItem[] = [
 
 const DIRECTORY_NAV: NavItem[] = [
   { href: '/projects', icon: Folder, label: 'Todos los proyectos' },
-  { href: '/clients', icon: Users, label: 'Todos los clientes' },
   { href: '/pipeline', icon: KanbanSquare, label: 'Pipeline global' },
   { href: '/reports', icon: BarChart3, label: 'Reportes' },
 ];
