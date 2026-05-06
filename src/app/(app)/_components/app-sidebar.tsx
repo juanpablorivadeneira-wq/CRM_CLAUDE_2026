@@ -11,6 +11,7 @@ import {
   BarChart3,
   Settings,
   ShieldCheck,
+  KeyRound,
   Bot,
   Layers,
 } from 'lucide-react';
@@ -44,7 +45,7 @@ const SETTINGS_NAV: NavItem[] = [
   { href: '/settings/project-types', icon: Layers, label: 'Tipos de proyecto' },
   { href: '/settings/users', icon: Users, label: 'Usuarios' },
   { href: '/settings/roles', icon: ShieldCheck, label: 'Roles y permisos' },
-  { href: '/settings/security', icon: ShieldCheck, label: 'Seguridad' },
+  { href: '/settings/security', icon: KeyRound, label: 'Seguridad' },
   { href: '/settings/general', icon: Settings, label: 'General' },
 ];
 
