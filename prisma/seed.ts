@@ -1,6 +1,7 @@
 import { PrismaClient, BusinessLine, AiMode, LeadOrigin, OpportunityStatus } from '@prisma/client';
 import { hashPassword } from '../src/lib/password';
 import { seedSystemRoles } from '../src/lib/permissions';
+import { seedClientsForActiveProjects } from '../scripts/seed-clients';
 
 const db = new PrismaClient();
 
@@ -406,6 +407,9 @@ async function main() {
     });
   }
   console.log(`✅ ${clientesEjemplo.length} clientes y oportunidades de ejemplo en Arandá`);
+
+  console.log('\n👥 Sembrando 5 clientes demo por proyecto activo en todas las orgs…');
+  await seedClientsForActiveProjects(db, { perProject: 5 });
 
   console.log('\n🎉 Seed completado.\n');
   console.log('Credenciales:');

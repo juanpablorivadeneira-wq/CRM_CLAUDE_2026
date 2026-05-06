@@ -16,6 +16,7 @@ import {
   Percent, ArrowRight, AlertCircle,
 } from 'lucide-react';
 import { ProjectsSummaryGrid } from './_components/projects-summary-grid';
+import { SeedDemoBanner } from './_components/seed-demo-banner';
 
 export default async function DashboardPage() {
   const ctx = await getTenantContext();
@@ -25,6 +26,9 @@ export default async function DashboardPage() {
     getRecentLeads(ctx.orgId, 6),
     getProjectsSummary(ctx.orgId),
   ]);
+
+  const projectsBelowDemo = projects.filter((p) => p.openCount < 5).length;
+  const showSeedBanner = projects.length > 0 && projectsBelowDemo > 0;
 
   const KPIs = [
     {
@@ -65,6 +69,8 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="Vista global de la organización y resumen por proyecto."
       />
+
+      {showSeedBanner && <SeedDemoBanner />}
 
       <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {KPIs.map(({ title, value, sub, icon: Icon }) => (

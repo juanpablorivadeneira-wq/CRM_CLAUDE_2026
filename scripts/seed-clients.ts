@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { PrismaClient, LeadOrigin } from '@prisma/client';
 
-const db = new PrismaClient();
-
 const FIRST_NAMES = ['Carlos', 'Ana', 'Sofía', 'Daniel', 'María', 'Javier', 'Lucía', 'Andrés', 'Camila', 'Luis'];
 const LAST_NAMES = ['Hernández', 'García', 'Martínez', 'Torres', 'López', 'Pérez', 'Ramírez', 'Vega', 'Castillo', 'Mendoza'];
 const ORIGINS: LeadOrigin[] = [
@@ -18,14 +16,19 @@ function rand<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const orgSlugFlag = args.find((a) => a.startsWith('--org='))?.slice(6);
-  const perProjectFlag = args.find((a) => a.startsWith('--count='))?.slice(8);
-  const perProject = perProjectFlag ? parseInt(perProjectFlag, 10) : 5;
+/**
+ * Crea N clientes con oportunidades para cada proyecto activo.
+ * Idempotente: si ya hay >= perProject oportunidades en un proyecto, lo salta.
+ * Si se pasa orgSlug, sólo siembra esa org. Si no, todas excepto 'system'.
+ */
+export async function seedClientsForActiveProjects(
+  db: PrismaClient,
+  options: { orgSlug?: string; perProject?: number } = {},
+) {
+  const { orgSlug, perProject = 5 } = options;
 
-  const orgs = orgSlugFlag
-    ? [await db.organization.findUnique({ where: { slug: orgSlugFlag } })]
+  const orgs = orgSlug
+    ? [await db.organization.findUnique({ where: { slug: orgSlug } })]
     : await db.organization.findMany({ where: { slug: { not: 'system' } } });
 
   for (const org of orgs) {
@@ -114,11 +117,24 @@ async function main() {
   }
 }
 
-main()
-  .catch((e) => {
+// CLI: npx tsx scripts/seed-clients.ts [--org=slug] [--count=N]
+async function main() {
+  const args = process.argv.slice(2);
+  const orgSlug = args.find((a) => a.startsWith('--org='))?.slice(6);
+  const perProjectFlag = args.find((a) => a.startsWith('--count='))?.slice(8);
+  const perProject = perProjectFlag ? parseInt(perProjectFlag, 10) : 5;
+
+  const db = new PrismaClient();
+  try {
+    await seedClientsForActiveProjects(db, { orgSlug, perProject });
+  } finally {
+    await db.$disconnect();
+  }
+}
+
+if (require.main === module) {
+  main().catch((e) => {
     console.error('❌ Error:', e);
     process.exit(1);
-  })
-  .finally(async () => {
-    await db.$disconnect();
   });
+}
