@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -68,12 +69,17 @@ export function AppSidebar({
       <SidebarHeader className="h-14 p-0">
         <Link
           href="/dashboard"
-          className="flex h-full w-full items-center justify-center bg-sidebar-primary/10 px-3"
+          className="relative flex h-full w-full items-center justify-center bg-sidebar-primary/10 px-3"
         >
-          <div className="flex items-center gap-2 whitespace-nowrap transition-opacity duration-200 group-data-[state=collapsed]:opacity-0">
-            <div className="font-headline text-xl font-bold tracking-wider text-sidebar-foreground">
-              BK<span className="text-primary mx-1">—</span>CRM
-            </div>
+          <div className="flex items-center justify-center transition-opacity duration-200 group-data-[state=collapsed]:opacity-0">
+            <Image
+              src="/logo.png"
+              alt="BuildKontrol"
+              width={919}
+              height={169}
+              priority
+              className="h-7 w-auto"
+            />
           </div>
           <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-data-[state=collapsed]:opacity-100">
             <span className="font-headline text-2xl font-bold text-sidebar-foreground">B</span>

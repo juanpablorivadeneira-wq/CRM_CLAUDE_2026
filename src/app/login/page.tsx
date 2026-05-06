@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import Image from 'next/image';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -85,14 +86,18 @@ function LoginInner() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
-        {/* Logo */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="font-headline text-3xl font-bold tracking-wider text-foreground flex items-center">
-            <span>BK</span>
-            <span className="mx-1 text-primary">—</span>
-            <span>CRM</span>
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex w-full justify-center rounded-lg bg-sidebar-background px-6 py-4">
+            <Image
+              src="/logo.png"
+              alt="BuildKontrol"
+              width={919}
+              height={169}
+              priority
+              className="h-12 w-auto"
+            />
           </div>
-          <p className="text-sm text-muted-foreground">Ecosistema BuildKontrol</p>
+          <p className="text-sm text-muted-foreground">CRM comercial · Ecosistema BuildKontrol</p>
         </div>
 
         <Card>
