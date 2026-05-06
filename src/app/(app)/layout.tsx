@@ -2,6 +2,7 @@ import { getTenantContext, getCurrentOrg } from '@/lib/tenant';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './_components/app-sidebar';
 import { UserAvatar } from '@/components/auth/user-avatar';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { OrgBadge } from './_components/org-badge';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -21,9 +22,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <SidebarTrigger variant="outline" size="icon" />
           <OrgBadge name={org?.name ?? ctx.orgName} plan={org?.plan ?? 'trial'} />
           <div className="flex-1" />
+          <ThemeToggle />
           <UserAvatar />
         </header>
-        <main className="flex-1 p-4 sm:px-6 sm:py-2">{children}</main>
+        <main id="main-content" className="flex-1 p-4 sm:px-6 sm:py-2">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Toaster } from '@/components/ui/toaster';
 import { SessionProvider } from '@/components/auth/session-provider';
+import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -20,10 +21,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-body antialiased">
-        <SessionProvider>
-          {children}
-        </SessionProvider>
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <SessionProvider>
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-background focus:px-3 focus:py-2 focus:text-foreground focus:shadow"
+            >
+              Saltar al contenido
+            </a>
+            {children}
+          </SessionProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
