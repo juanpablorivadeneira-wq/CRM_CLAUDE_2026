@@ -17,18 +17,23 @@ import {
 } from 'lucide-react';
 import { ProjectsSummaryGrid } from './_components/projects-summary-grid';
 import { SeedDemoBanner } from './_components/seed-demo-banner';
+import { db } from '@/lib/db';
 
 export default async function DashboardPage() {
   const ctx = await getTenantContext();
 
-  const [metrics, recent, projects] = await Promise.all([
+  const [metrics, recent, projects, demoClientsCount] = await Promise.all([
     getDashboardMetrics(ctx.orgId),
     getRecentLeads(ctx.orgId, 6),
     getProjectsSummary(ctx.orgId),
+    db.client.count({
+      where: { orgId: ctx.orgId, tags: { has: 'demo' }, deletedAt: null },
+    }),
   ]);
 
   const projectsBelowDemo = projects.filter((p) => p.openCount < 5).length;
-  const showSeedBanner = projects.length > 0 && projectsBelowDemo > 0;
+  const hasDemoData = demoClientsCount > 0;
+  const showSeedBanner = projects.length > 0 && (projectsBelowDemo > 0 || hasDemoData);
 
   const KPIs = [
     {
@@ -70,7 +75,7 @@ export default async function DashboardPage() {
         description="Vista global de la organización y resumen por proyecto."
       />
 
-      {showSeedBanner && <SeedDemoBanner />}
+      {showSeedBanner && <SeedDemoBanner hasDemoData={hasDemoData} />}
 
       <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {KPIs.map(({ title, value, sub, icon: Icon }) => (

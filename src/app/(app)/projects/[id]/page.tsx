@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { getTenantContext } from '@/lib/tenant';
 import { hasPermission } from '@/lib/permissions';
 import { PageHeader } from '@/components/page-header';
+import { DeleteProjectButton } from './_components/delete-project-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,10 @@ export default async function ProjectDetailPage({
 }) {
   const { id } = await params;
   const ctx = await getTenantContext();
-  const canEdit = await hasPermission(ctx.userId, 'projects', 'editar');
+  const [canEdit, canDelete] = await Promise.all([
+    hasPermission(ctx.userId, 'projects', 'editar'),
+    hasPermission(ctx.userId, 'projects', 'eliminar'),
+  ]);
 
   const project = await db.project.findUnique({
     where: { id },
@@ -140,6 +144,13 @@ export default async function ProjectDetailPage({
                 <p>Edición de proyecto disponible próximamente.</p>
               </TooltipContent>
             </Tooltip>
+          )}
+          {canDelete && (
+            <DeleteProjectButton
+              projectId={project.id}
+              projectName={project.name}
+              opportunityCount={project._count.opportunities}
+            />
           )}
         </div>
       </PageHeader>

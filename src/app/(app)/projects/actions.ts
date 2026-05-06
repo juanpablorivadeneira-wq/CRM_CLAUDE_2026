@@ -98,7 +98,7 @@ export async function updateProject(id: string, data: z.infer<typeof projectSche
   return { ok: true };
 }
 
-export async function deleteProject(id: string) {
+export async function deleteProject(id: string, options: { force?: boolean } = {}) {
   const ctx = await getTenantContext();
   await requirePermission(ctx.userId, 'projects', 'eliminar');
 
@@ -107,12 +107,24 @@ export async function deleteProject(id: string) {
     include: { _count: { select: { opportunities: true } } },
   });
   if (!project || project.orgId !== ctx.orgId) return { ok: false, error: 'Proyecto no encontrado' };
-  if (project._count.opportunities > 0) {
-    return { ok: false, error: `Este proyecto tiene ${project._count.opportunities} oportunidad(es). Muévelas o elimínalas primero.` };
+
+  if (project._count.opportunities > 0 && !options.force) {
+    return {
+      ok: false,
+      error: `Este proyecto tiene ${project._count.opportunities} oportunidad(es).`,
+      requiresConfirm: true,
+      opportunityCount: project._count.opportunities,
+    };
   }
 
-  // Soft delete
-  await db.project.update({ where: { id }, data: { deletedAt: new Date() } });
+  const now = new Date();
+  await db.$transaction([
+    db.opportunity.updateMany({
+      where: { projectId: id, deletedAt: null },
+      data: { deletedAt: now },
+    }),
+    db.project.update({ where: { id }, data: { deletedAt: now } }),
+  ]);
 
   await db.auditLog.create({
     data: {
@@ -123,9 +135,64 @@ export async function deleteProject(id: string) {
       entityId: id,
       actorType: 'human',
       actorId: ctx.userId,
+      after: { cascadedOpportunities: project._count.opportunities },
     },
   });
 
+  logger.info(
+    { orgId: ctx.orgId, projectId: id, cascadedOpportunities: project._count.opportunities },
+    'Project soft-deleted',
+  );
+
   revalidatePath('/projects');
-  return { ok: true };
+  revalidatePath('/dashboard');
+  return { ok: true, deletedOpportunities: project._count.opportunities };
+}
+
+/**
+ * Elimina (soft) sólo los clientes y oportunidades creadas por el seed demo
+ * (tag 'demo' en cliente). Útil cuando el usuario quiere cargar datos reales.
+ */
+export async function purgeDemoDataAction() {
+  const ctx = await getTenantContext();
+  await requirePermission(ctx.userId, 'projects', 'eliminar');
+
+  const demoClients = await db.client.findMany({
+    where: { orgId: ctx.orgId, tags: { has: 'demo' }, deletedAt: null },
+    select: { id: true },
+  });
+  const demoClientIds = demoClients.map((c) => c.id);
+
+  if (demoClientIds.length === 0) {
+    return { ok: true, deletedClients: 0, deletedOpportunities: 0 };
+  }
+
+  const now = new Date();
+  const [{ count: oppsCount }] = await db.$transaction([
+    db.opportunity.updateMany({
+      where: { orgId: ctx.orgId, clientId: { in: demoClientIds }, deletedAt: null },
+      data: { deletedAt: now },
+    }),
+    db.client.updateMany({
+      where: { id: { in: demoClientIds } },
+      data: { deletedAt: now },
+    }),
+  ]);
+
+  await db.auditLog.create({
+    data: {
+      orgId: ctx.orgId,
+      action: 'delete',
+      module: 'clients',
+      entityType: 'Client',
+      entityId: 'demo-purge',
+      actorType: 'human',
+      actorId: ctx.userId,
+      after: { deletedClients: demoClientIds.length, deletedOpportunities: oppsCount },
+    },
+  });
+
+  revalidatePath('/dashboard');
+  revalidatePath('/projects');
+  return { ok: true, deletedClients: demoClientIds.length, deletedOpportunities: oppsCount };
 }
