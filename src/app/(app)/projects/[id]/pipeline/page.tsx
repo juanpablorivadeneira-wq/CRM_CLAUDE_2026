@@ -56,8 +56,8 @@ export default async function ProjectPipelinePage({
   return (
     <>
       <PageHeader
-        title="Pipeline"
-        description={`Oportunidades por etapa en ${project.name}.`}
+        title="Pipeline del proyecto"
+        description="Oportunidades por etapa, drag-and-drop para mover."
       >
         <div className="flex items-center gap-2">
           {canExport && opportunities.length > 0 && (

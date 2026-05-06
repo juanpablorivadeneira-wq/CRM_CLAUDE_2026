@@ -15,13 +15,18 @@ export default async function ProjectScopedLayout({
 
   const project = await db.project.findFirst({
     where: { id, orgId: ctx.orgId, deletedAt: null },
-    select: { id: true, name: true },
+    select: { id: true, name: true, businessLine: true, status: true },
   });
   if (!project) notFound();
 
   return (
     <>
-      <ProjectSubNav projectId={project.id} projectName={project.name} />
+      <ProjectSubNav
+        projectId={project.id}
+        projectName={project.name}
+        businessLine={project.businessLine}
+        status={project.status}
+      />
       {children}
     </>
   );

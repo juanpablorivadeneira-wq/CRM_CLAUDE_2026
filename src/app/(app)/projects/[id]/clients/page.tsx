@@ -40,8 +40,8 @@ export default async function ProjectClientsPage({
   return (
     <>
       <PageHeader
-        title="Clientes"
-        description={`Personas y empresas con oportunidades en ${project.name}.`}
+        title="Clientes del proyecto"
+        description="Personas y empresas con oportunidades activas en este proyecto."
       />
 
       <Card>

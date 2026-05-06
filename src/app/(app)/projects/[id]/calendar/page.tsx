@@ -23,8 +23,8 @@ export default async function ProjectCalendarPage({
   return (
     <>
       <PageHeader
-        title="Calendario"
-        description={`Citas y bloqueos vinculados a ${project.name}.`}
+        title="Calendario del proyecto"
+        description="Citas y bloqueos vinculados a este proyecto."
       >
         <Badge variant="outline" className="gap-1">
           <Sparkles className="h-3 w-3" /> Próximamente

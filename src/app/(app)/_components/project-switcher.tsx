@@ -64,11 +64,27 @@ export function ProjectSwitcher({
     startTransition(async () => {
       await setCurrentProjectAction(id);
       setOpen(false);
-      router.refresh();
+
+      const projectMatch = /^\/projects\/[^/]+(\/[^?]*)?/.exec(pathname);
+      if (projectMatch && id) {
+        const section = projectMatch[1] ?? '';
+        router.push(`/projects/${id}${section}`);
+      } else if (projectMatch && !id) {
+        router.push('/projects');
+      } else {
+        router.refresh();
+      }
     });
   }
 
-  const CurrentIcon = currentProject ? LINE_ICONS[currentProject.businessLine] : Building2;
+  const currentProjectFromUrl = useMemo(() => {
+    const m = /^\/projects\/([^/]+)/.exec(pathname);
+    if (!m) return null;
+    return projects.find((p) => p.id === m[1]) ?? null;
+  }, [projects, pathname]);
+
+  const displayed = currentProjectFromUrl ?? currentProject;
+  const CurrentIcon = displayed ? LINE_ICONS[displayed.businessLine] : Building2;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -84,7 +100,7 @@ export function ProjectSwitcher({
           <span className="flex min-w-0 items-center gap-2">
             <CurrentIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="truncate text-sm">
-              {currentProject ? currentProject.name : 'Todos los proyectos'}
+              {displayed ? displayed.name : 'Todos los proyectos'}
             </span>
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -111,12 +127,12 @@ export function ProjectSwitcher({
             onClick={() => selectProject(null)}
             className={cn(
               'flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent',
-              !currentProject && 'bg-accent/50'
+              !displayed && 'bg-accent/50'
             )}
           >
             <Building2 className="h-4 w-4 text-muted-foreground" />
             <span className="flex-1">Todos los proyectos</span>
-            {!currentProject && <Check className="h-4 w-4" />}
+            {!displayed && <Check className="h-4 w-4" />}
           </button>
 
           {filtered.length === 0 ? (
@@ -126,7 +142,7 @@ export function ProjectSwitcher({
           ) : (
             filtered.map((p) => {
               const Icon = LINE_ICONS[p.businessLine];
-              const active = currentProject?.id === p.id;
+              const active = displayed?.id === p.id;
               return (
                 <button
                   key={p.id}
@@ -149,7 +165,7 @@ export function ProjectSwitcher({
           )}
         </div>
 
-        {currentProject && (
+        {displayed && (
           <div className="border-t p-2">
             <Button
               variant="ghost"

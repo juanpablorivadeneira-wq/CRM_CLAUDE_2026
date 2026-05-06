@@ -42,8 +42,8 @@ export default async function ProjectReportsPage({
   return (
     <>
       <PageHeader
-        title="Reportes"
-        description={`Forecast, productividad, origen y pérdidas de ${project.name}.`}
+        title="Reportes del proyecto"
+        description="Forecast, productividad, origen de leads y análisis de pérdida."
       />
 
       <Tabs defaultValue={sp.tab ?? 'forecast'} className="space-y-4">

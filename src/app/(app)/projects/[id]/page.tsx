@@ -1,18 +1,19 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import { format, isPast } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { db } from '@/lib/db';
 import { getTenantContext } from '@/lib/tenant';
 import { hasPermission } from '@/lib/permissions';
 import { PageHeader } from '@/components/page-header';
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   MapPin, Building2, Pencil, Hammer,
-  Users, TrendingUp, Bot, DollarSign, Settings,
+  Users, TrendingUp, Bot, DollarSign, Settings, AlertCircle,
 } from 'lucide-react';
 
 const LINE_LABELS = {
@@ -73,6 +74,20 @@ export default async function ProjectDetailPage({
     _sum: { estimatedValue: true },
   });
 
+  const pendingTasks = await db.task.findMany({
+    where: {
+      orgId: ctx.orgId,
+      completedAt: null,
+      opportunity: { projectId: project.id },
+    },
+    include: {
+      opportunity: { select: { id: true, client: { select: { name: true } } } },
+      assignee: { select: { name: true } },
+    },
+    orderBy: { dueDate: 'asc' },
+    take: 8,
+  });
+
   const projectOpportunities = await db.opportunity.findMany({
     where: { projectId: project.id, deletedAt: null },
     include: {
@@ -110,17 +125,8 @@ export default async function ProjectDetailPage({
 
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: 'Proyectos', href: '/projects' },
-          { label: project.name },
-        ]}
-      />
-
-      <PageHeader title={project.name} description={project.description ?? 'Sin descripción.'}>
+      <PageHeader title="Resumen" description={project.description ?? 'Resumen del proyecto.'}>
         <div className="flex items-center gap-2">
-          <Badge variant="outline">{LINE_LABELS[project.businessLine]}</Badge>
-          <Badge>{STATUS_LABELS[project.status]}</Badge>
           {canEdit && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -223,6 +229,52 @@ export default async function ProjectDetailPage({
           </div>
         )}
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="font-headline flex items-center gap-2">
+            <AlertCircle className="h-5 w-5" /> Tareas pendientes
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {pendingTasks.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              Sin tareas pendientes en este proyecto.
+            </p>
+          ) : (
+            <div className="divide-y">
+              {pendingTasks.map((t) => {
+                const overdue = t.dueDate && isPast(new Date(t.dueDate));
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/opportunities/${t.opportunity.id}`}
+                    className="block p-4 transition-colors hover:bg-muted/40"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{t.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.opportunity.client.name}
+                          {t.assignee && ` · ${t.assignee.name}`}
+                        </p>
+                      </div>
+                      {t.dueDate && (
+                        <span
+                          className={`whitespace-nowrap text-xs ${overdue ? 'font-medium text-destructive' : 'text-muted-foreground'}`}
+                        >
+                          {format(new Date(t.dueDate), 'dd MMM', { locale: es })}
+                          {overdue && ' (vencida)'}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

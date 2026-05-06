@@ -4,45 +4,26 @@ import { es } from 'date-fns/locale';
 import { getTenantContext } from '@/lib/tenant';
 import {
   getDashboardMetrics,
-  getFunnelData,
   getRecentLeads,
+  getProjectsSummary,
 } from '@/lib/analytics';
-import { db } from '@/lib/db';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Building2, Users, TrendingUp, Calendar, Trophy,
+  Users, TrendingUp, Calendar, Trophy,
   Percent, ArrowRight, AlertCircle,
 } from 'lucide-react';
-import { FunnelChart } from './_components/funnel-chart';
-import { DashboardProjectFilter } from './_components/dashboard-project-filter';
+import { ProjectsSummaryGrid } from './_components/projects-summary-grid';
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ projectId?: string }>;
-}) {
+export default async function DashboardPage() {
   const ctx = await getTenantContext();
-  const sp = (await searchParams) ?? {};
-  const projectId = sp.projectId;
 
-  const [metrics, funnel, recent, projects, project] = await Promise.all([
-    getDashboardMetrics(ctx.orgId, projectId),
-    getFunnelData(ctx.orgId, projectId),
-    getRecentLeads(ctx.orgId, 6, projectId),
-    db.project.findMany({
-      where: { orgId: ctx.orgId, deletedAt: null, status: 'active' },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    projectId
-      ? db.project.findUnique({
-          where: { id: projectId },
-          select: { name: true, businessLine: true, referencePrice: true },
-        })
-      : Promise.resolve(null),
+  const [metrics, recent, projects] = await Promise.all([
+    getDashboardMetrics(ctx.orgId),
+    getRecentLeads(ctx.orgId, 6),
+    getProjectsSummary(ctx.orgId),
   ]);
 
   const KPIs = [
@@ -81,19 +62,11 @@ export default async function DashboardPage({
   return (
     <>
       <PageHeader
-        title={project ? `Dashboard · ${project.name}` : 'Dashboard'}
-        description={
-          project ? 'Vista del proyecto seleccionado.' : 'Vista global de ventas y oportunidades.'
-        }
-      >
-        <DashboardProjectFilter
-          projects={projects}
-          selectedId={projectId}
-        />
-      </PageHeader>
+        title="Dashboard"
+        description="Vista global de la organización y resumen por proyecto."
+      />
 
-      {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
+      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {KPIs.map(({ title, value, sub, icon: Icon }) => (
           <Card key={title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -108,73 +81,71 @@ export default async function DashboardPage({
         ))}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Embudo */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Embudo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <FunnelChart data={funnel} />
-          </CardContent>
-        </Card>
+      <section className="mb-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">Mis proyectos</h2>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/projects">
+              Ver todos <ArrowRight className="ml-1.5 h-3 w-3" />
+            </Link>
+          </Button>
+        </div>
+        <ProjectsSummaryGrid projects={projects} />
+      </section>
 
-        {/* Tareas pendientes */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" /> Tareas pendientes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {metrics.pendingTasks.length === 0 ? (
-              <p className="p-6 text-center text-sm text-muted-foreground">
-                Sin tareas pendientes.
-              </p>
-            ) : (
-              <div className="divide-y">
-                {metrics.pendingTasks.map((t: any) => {
-                  const overdue = t.dueDate && isPast(t.dueDate);
-                  return (
-                    <Link
-                      key={t.id}
-                      href={`/opportunities/${t.opportunityId}`}
-                      className="block p-4 hover:bg-muted/40 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{t.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {t.opportunity.client.name}
-                            {t.assignee && ` · ${t.assignee.name}`}
-                          </p>
-                        </div>
-                        {t.dueDate && (
-                          <span
-                            className={`text-xs whitespace-nowrap ${overdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}
-                          >
-                            {format(t.dueDate, "dd MMM", { locale: es })}
-                            {overdue && ' (vencida)'}
-                          </span>
-                        )}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="font-headline flex items-center gap-2">
+            <AlertCircle className="h-5 w-5" /> Tareas pendientes (todos los proyectos)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {metrics.pendingTasks.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              Sin tareas pendientes.
+            </p>
+          ) : (
+            <div className="divide-y">
+              {metrics.pendingTasks.map((t: any) => {
+                const overdue = t.dueDate && isPast(t.dueDate);
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/opportunities/${t.opportunityId}`}
+                    className="block p-4 transition-colors hover:bg-muted/40"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{t.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.opportunity.client.name}
+                          {t.assignee && ` · ${t.assignee.name}`}
+                        </p>
                       </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                      {t.dueDate && (
+                        <span
+                          className={`whitespace-nowrap text-xs ${overdue ? 'font-medium text-destructive' : 'text-muted-foreground'}`}
+                        >
+                          {format(t.dueDate, 'dd MMM', { locale: es })}
+                          {overdue && ' (vencida)'}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Leads recientes */}
-      <Card className="mt-6">
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="font-headline flex items-center gap-2">
             <Users className="h-5 w-5" /> Oportunidades recientes
           </CardTitle>
           <Button asChild variant="ghost" size="sm">
-            <Link href={projectId ? `/pipeline?projectId=${projectId}` : '/pipeline'}>
+            <Link href="/pipeline">
               Ver pipeline <ArrowRight className="ml-2 h-3 w-3" />
             </Link>
           </Button>
@@ -190,16 +161,16 @@ export default async function DashboardPage({
                 <Link
                   key={o.id}
                   href={`/opportunities/${o.id}`}
-                  className="flex items-center justify-between gap-3 p-4 hover:bg-muted/40 transition-colors"
+                  className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/40"
                 >
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium">{o.client.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {o.project.name}
                       {o.unitDetail && ` · ${o.unitDetail}`}
                     </p>
                   </div>
-                  <div className="text-right space-y-1">
+                  <div className="space-y-1 text-right">
                     <Badge
                       variant={o.stage.isWon ? 'default' : o.stage.isLost ? 'destructive' : 'outline'}
                       className={o.stage.isWon ? 'bg-green-600' : ''}

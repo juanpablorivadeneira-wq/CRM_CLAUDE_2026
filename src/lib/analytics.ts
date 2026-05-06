@@ -323,6 +323,95 @@ export async function getLossAnalysis(orgId: string, projectId?: string) {
 }
 
 /**
+ * Resumen ejecutivo por proyecto. Una sola pasada de queries (groupBy)
+ * para evitar N×10 lookups cuando hay muchos proyectos.
+ */
+export async function getProjectsSummary(orgId: string) {
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  const [projects, openAgg, newAgg, wonAgg, pendingTasks] = await Promise.all([
+    db.project.findMany({
+      where: { orgId, deletedAt: null, status: 'active' },
+      select: {
+        id: true,
+        name: true,
+        businessLine: true,
+        imageUrl: true,
+        referencePrice: true,
+      },
+      orderBy: { name: 'asc' },
+    }),
+    db.opportunity.groupBy({
+      by: ['projectId'],
+      where: { orgId, deletedAt: null, status: 'open' },
+      _count: true,
+      _sum: { estimatedValue: true },
+    }),
+    db.opportunity.groupBy({
+      by: ['projectId'],
+      where: { orgId, deletedAt: null, createdAt: { gte: monthStart, lte: monthEnd } },
+      _count: true,
+    }),
+    db.opportunity.groupBy({
+      by: ['projectId'],
+      where: {
+        orgId,
+        deletedAt: null,
+        status: 'won',
+        wonAt: { gte: monthStart, lte: monthEnd },
+      },
+      _count: true,
+      _sum: { estimatedValue: true },
+    }),
+    db.task.findMany({
+      where: { orgId, completedAt: null },
+      include: {
+        opportunity: {
+          select: {
+            projectId: true,
+            client: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { dueDate: 'asc' },
+    }),
+  ]);
+
+  const openByProject = new Map(openAgg.map((r) => [r.projectId, r]));
+  const newByProject = new Map(newAgg.map((r) => [r.projectId, r]));
+  const wonByProject = new Map(wonAgg.map((r) => [r.projectId, r]));
+  const tasksByProject = new Map<string, typeof pendingTasks>();
+  for (const t of pendingTasks) {
+    const pid = t.opportunity.projectId;
+    if (!tasksByProject.has(pid)) tasksByProject.set(pid, []);
+    tasksByProject.get(pid)!.push(t);
+  }
+
+  return projects.map((p) => {
+    const open = openByProject.get(p.id);
+    const fresh = newByProject.get(p.id);
+    const won = wonByProject.get(p.id);
+    const tasks = tasksByProject.get(p.id) ?? [];
+    return {
+      id: p.id,
+      name: p.name,
+      businessLine: p.businessLine,
+      imageUrl: p.imageUrl,
+      referencePrice: p.referencePrice,
+      openCount: open?._count ?? 0,
+      openValue: open?._sum.estimatedValue ?? 0,
+      newLeadsThisMonth: fresh?._count ?? 0,
+      wonThisMonth: won?._count ?? 0,
+      wonValueThisMonth: won?._sum.estimatedValue ?? 0,
+      pendingTasks: tasks.slice(0, 3),
+      pendingTasksTotal: tasks.length,
+    };
+  });
+}
+
+/**
  * Leads recientes (últimos N) con sus relaciones.
  */
 export async function getRecentLeads(orgId: string, limit: number, projectId?: string) {
