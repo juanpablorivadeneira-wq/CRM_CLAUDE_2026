@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   ArrowLeft, MapPin, Building2, Pencil, Hammer,
   Users, TrendingUp, Bot, DollarSign, Settings,
@@ -121,9 +122,18 @@ export default async function ProjectDetailPage({
           <Badge variant="outline">{LINE_LABELS[project.businessLine]}</Badge>
           <Badge>{STATUS_LABELS[project.status]}</Badge>
           {canEdit && (
-            <Button variant="outline" size="sm" disabled>
-              <Settings className="mr-2 h-4 w-4" /> Editar
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0}>
+                  <Button variant="outline" size="sm" disabled>
+                    <Settings className="mr-2 h-4 w-4" /> Editar
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Edición de proyecto disponible próximamente.</p>
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
       </PageHeader>
