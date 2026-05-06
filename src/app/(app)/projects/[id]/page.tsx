@@ -71,6 +71,39 @@ export default async function ProjectDetailPage({
     _sum: { estimatedValue: true },
   });
 
+  const projectOpportunities = await db.opportunity.findMany({
+    where: { projectId: project.id, deletedAt: null },
+    include: {
+      client: { select: { id: true, name: true, email: true, phone: true } },
+      stage: { select: { id: true, name: true, isWon: true, isLost: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  type ClientGroup = {
+    client: (typeof projectOpportunities)[number]['client'];
+    count: number;
+    totalValue: number;
+    latestStage: (typeof projectOpportunities)[number]['stage'];
+  };
+  const clientsMap = new Map<string, ClientGroup>();
+  for (const opp of projectOpportunities) {
+    const existing = clientsMap.get(opp.clientId);
+    const oppValue = Number(opp.estimatedValue ?? 0);
+    if (existing) {
+      existing.count += 1;
+      existing.totalValue += oppValue;
+    } else {
+      clientsMap.set(opp.clientId, {
+        client: opp.client,
+        count: 1,
+        totalValue: oppValue,
+        latestStage: opp.stage,
+      });
+    }
+  }
+  const projectClients = Array.from(clientsMap.values());
+
   const Icon = LINE_ICONS[project.businessLine];
 
   return (
@@ -140,7 +173,9 @@ export default async function ProjectDetailPage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{AI_MODE_LABELS[project.aiMode]}</div>
-            <p className="text-xs text-muted-foreground">Disponible en Fase 7</p>
+            <p className="text-xs text-muted-foreground">
+              {project.aiMode === 'off' ? 'Activable cuando esté disponible' : 'Activo'}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -204,6 +239,54 @@ export default async function ProjectDetailPage({
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="font-headline flex items-center gap-2">
+            <Users className="h-5 w-5" /> Clientes en este proyecto
+          </CardTitle>
+          <Badge variant="outline">{projectClients.length}</Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          {projectClients.length === 0 ? (
+            <p className="p-8 text-center text-sm text-muted-foreground">
+              Aún no hay clientes con oportunidades en este proyecto.
+            </p>
+          ) : (
+            <div className="divide-y">
+              {projectClients.map(({ client, count, totalValue, latestStage }) => (
+                <Link
+                  key={client.id}
+                  href={`/clients/${client.id}`}
+                  className="flex items-center justify-between gap-3 p-4 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{client.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {count} {count === 1 ? 'oportunidad' : 'oportunidades'}
+                      {client.email && ` · ${client.email}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Badge
+                      variant={latestStage.isWon ? 'default' : latestStage.isLost ? 'destructive' : 'outline'}
+                      className={latestStage.isWon ? 'bg-green-600' : ''}
+                    >
+                      {latestStage.name}
+                    </Badge>
+                    <div className="text-right w-28">
+                      <div className="text-sm font-medium">
+                        ${totalValue.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">valor total</div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </>
