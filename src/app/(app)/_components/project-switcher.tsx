@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { setCurrentProjectAction } from './project-switcher.actions';
+import { nextUrlForProjectChange } from './project-switcher-url';
 import type { CurrentProject } from '@/lib/current-project';
 
 const LINE_ICONS = {
@@ -64,16 +65,7 @@ export function ProjectSwitcher({
     startTransition(async () => {
       await setCurrentProjectAction(id);
       setOpen(false);
-
-      const projectMatch = /^\/projects\/[^/]+(\/[^?]*)?/.exec(pathname);
-      if (projectMatch && id) {
-        const section = projectMatch[1] ?? '';
-        router.push(`/projects/${id}${section}`);
-      } else if (projectMatch && !id) {
-        router.push('/projects');
-      } else {
-        router.refresh();
-      }
+      router.push(nextUrlForProjectChange(pathname, id));
     });
   }
 

@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { SidebarProjectSwitcher } from './sidebar-project-switcher';
 import type { CurrentProject } from '@/lib/current-project';
 
 type NavItem = {
@@ -148,8 +149,8 @@ export function AppSidebar({
 
         {activeProject && (
           <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center gap-1.5">
-              <span className="truncate">En {activeProject.name}</span>
+            <SidebarGroupLabel asChild className="p-0">
+              <SidebarProjectSwitcher active={activeProject} projects={projects} />
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
