@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -15,6 +16,9 @@ import {
   KeyRound,
   Bot,
   Layers,
+  ChevronDown,
+  Folder,
+  FileText,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -23,9 +27,14 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
 } from '@/components/ui/sidebar';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
+import type { CurrentProject } from '@/lib/current-project';
 
 type NavItem = {
   href: string;
@@ -33,16 +42,19 @@ type NavItem = {
   label: string;
 };
 
-const MAIN_NAV: NavItem[] = [
+const GENERAL_NAV: NavItem[] = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/projects', icon: Building2, label: 'Proyectos' },
-  { href: '/clients', icon: Users, label: 'Clientes' },
-  { href: '/pipeline', icon: KanbanSquare, label: 'Pipeline' },
   { href: '/calendar', icon: Calendar, label: 'Calendario' },
+];
+
+const DIRECTORY_NAV: NavItem[] = [
+  { href: '/projects', icon: Folder, label: 'Todos los proyectos' },
+  { href: '/clients', icon: Users, label: 'Todos los clientes' },
+  { href: '/pipeline', icon: KanbanSquare, label: 'Pipeline global' },
   { href: '/reports', icon: BarChart3, label: 'Reportes' },
 ];
 
-const SETTINGS_NAV: NavItem[] = [
+const ADMIN_NAV: NavItem[] = [
   { href: '/settings/project-types', icon: Layers, label: 'Tipos de proyecto' },
   { href: '/settings/users', icon: Users, label: 'Usuarios' },
   { href: '/settings/roles', icon: ShieldCheck, label: 'Roles y permisos' },
@@ -50,19 +62,31 @@ const SETTINGS_NAV: NavItem[] = [
   { href: '/settings/general', icon: Settings, label: 'General' },
 ];
 
+function projectNav(projectId: string): NavItem[] {
+  return [
+    { href: `/projects/${projectId}`, icon: FileText, label: 'Resumen' },
+  ];
+}
+
 export function AppSidebar({
   orgName,
   orgSlug,
-  primaryColor,
   isSuperAdmin,
+  currentProject,
 }: {
   orgName: string;
   orgSlug: string;
   primaryColor: string;
   isSuperAdmin: boolean;
+  currentProject: CurrentProject | null;
 }) {
   const pathname = usePathname();
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
+
+  const [adminOpen, setAdminOpen] = useState(
+    pathname.startsWith('/settings') || pathname.startsWith('/super-admin')
+  );
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" className="border-sidebar-border">
@@ -88,53 +112,120 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarMenu>
-          {MAIN_NAV.map(({ href, icon: Icon, label }) => (
-            <SidebarMenuItem key={href}>
-              <SidebarMenuButton asChild isActive={isActive(href)} tooltip={{ children: label }}>
-                <Link href={href}>
-                  <Icon />
-                  <span>{label}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-
-        <SidebarSeparator />
-
-        <SidebarMenu>
-          {SETTINGS_NAV.map(({ href, icon: Icon, label }) => (
-            <SidebarMenuItem key={href}>
-              <SidebarMenuButton asChild isActive={isActive(href)} tooltip={{ children: label }}>
-                <Link href={href}>
-                  <Icon />
-                  <span>{label}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-
-        {isSuperAdmin && (
-          <>
-            <SidebarSeparator />
+        <SidebarGroup>
+          <SidebarGroupLabel>General</SidebarGroupLabel>
+          <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={isActive('/super-admin')}
-                  tooltip={{ children: 'Super Admin' }}
-                >
-                  <Link href="/super-admin">
-                    <Bot />
-                    <span>Super Admin</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {GENERAL_NAV.map(({ href, icon: Icon, label }) => (
+                <SidebarMenuItem key={href}>
+                  <SidebarMenuButton asChild isActive={isActive(href)} tooltip={{ children: label }}>
+                    <Link href={href}>
+                      <Icon />
+                      <span>{label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
-          </>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {currentProject && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="flex items-center gap-1.5">
+              <span className="truncate">En {currentProject.name}</span>
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {projectNav(currentProject.id).map(({ href, icon: Icon, label }) => (
+                  <SidebarMenuItem key={href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === href}
+                      tooltip={{ children: label }}
+                    >
+                      <Link href={href}>
+                        <Icon />
+                        <span>{label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         )}
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Directorio global</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {DIRECTORY_NAV.map(({ href, icon: Icon, label }) => (
+                <SidebarMenuItem key={href}>
+                  <SidebarMenuButton asChild isActive={isActive(href)} tooltip={{ children: label }}>
+                    <Link href={href}>
+                      <Icon />
+                      <span>{label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <Collapsible open={adminOpen} onOpenChange={setAdminOpen} className="group/admin">
+          <SidebarGroup>
+            <CollapsibleTrigger asChild>
+              <SidebarGroupLabel
+                role="button"
+                className="cursor-pointer hover:text-sidebar-foreground"
+              >
+                <span className="flex-1">Administración</span>
+                <ChevronDown
+                  className={cn(
+                    'h-3.5 w-3.5 transition-transform',
+                    adminOpen && 'rotate-180'
+                  )}
+                />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {ADMIN_NAV.map(({ href, icon: Icon, label }) => (
+                    <SidebarMenuItem key={href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(href)}
+                        tooltip={{ children: label }}
+                      >
+                        <Link href={href}>
+                          <Icon />
+                          <span>{label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                  {isSuperAdmin && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive('/super-admin')}
+                        tooltip={{ children: 'Super Admin' }}
+                      >
+                        <Link href="/super-admin">
+                          <Bot />
+                          <span>Super Admin</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
       </SidebarContent>
 
       <SidebarFooter className="p-3 text-xs text-sidebar-foreground/60">
