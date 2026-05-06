@@ -6,12 +6,12 @@ import { db } from '@/lib/db';
 import { getTenantContext } from '@/lib/tenant';
 import { hasPermission } from '@/lib/permissions';
 import { PageHeader } from '@/components/page-header';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  ArrowLeft,
   User,
   Building,
   Mail,
@@ -86,13 +86,12 @@ export default async function OpportunityDetailPage({
 
   return (
     <>
-      <div className="mb-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/pipeline">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Pipeline
-          </Link>
-        </Button>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: 'Pipeline', href: '/pipeline' },
+          { label: opp.client.name },
+        ]}
+      />
 
       <PageHeader
         title={opp.client.name}

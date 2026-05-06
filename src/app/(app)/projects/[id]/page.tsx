@@ -5,12 +5,13 @@ import { db } from '@/lib/db';
 import { getTenantContext } from '@/lib/tenant';
 import { hasPermission } from '@/lib/permissions';
 import { PageHeader } from '@/components/page-header';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  ArrowLeft, MapPin, Building2, Pencil, Hammer,
+  MapPin, Building2, Pencil, Hammer,
   Users, TrendingUp, Bot, DollarSign, Settings,
 } from 'lucide-react';
 
@@ -109,13 +110,12 @@ export default async function ProjectDetailPage({
 
   return (
     <>
-      <div className="mb-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/projects">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Proyectos
-          </Link>
-        </Button>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: 'Proyectos', href: '/projects' },
+          { label: project.name },
+        ]}
+      />
 
       <PageHeader title={project.name} description={project.description ?? 'Sin descripción.'}>
         <div className="flex items-center gap-2">

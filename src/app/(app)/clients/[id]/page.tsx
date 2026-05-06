@@ -5,11 +5,12 @@ import { es } from 'date-fns/locale';
 import { db } from '@/lib/db';
 import { getTenantContext } from '@/lib/tenant';
 import { PageHeader } from '@/components/page-header';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  ArrowLeft, Mail, Phone, MessageCircle, MapPin,
+  Mail, Phone, MessageCircle, MapPin,
   User, Building, ArrowRight,
 } from 'lucide-react';
 
@@ -64,13 +65,12 @@ export default async function ClientDetailPage({
 
   return (
     <>
-      <div className="mb-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/clients">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Clientes
-          </Link>
-        </Button>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: 'Clientes', href: '/clients' },
+          { label: client.name },
+        ]}
+      />
 
       <PageHeader title={client.name}>
         <div className="flex items-center gap-2">
