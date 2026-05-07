@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Pencil, Hammer, MapPin, ArrowRight } from 'lucide-react';
-import { CreateProjectDialog } from './_components/create-project-dialog';
+import { ProjectFormDialog } from './_components/project-form-dialog';
 
 const LINE_LABELS = {
   real_estate: 'Inmobiliaria',
@@ -62,7 +62,7 @@ export default async function ProjectsPage() {
         description={`${projects.length} de ${org?.maxProjects ?? 0} proyectos del plan ${org?.plan ?? ''}.`}
       >
         {canCreate && projectTypes.length > 0 && (
-          <CreateProjectDialog projectTypes={projectTypes} />
+          <ProjectFormDialog mode="create" projectTypes={projectTypes} />
         )}
       </PageHeader>
 
@@ -96,6 +96,7 @@ export default async function ProjectsPage() {
                         src={p.imageUrl}
                         alt={p.name}
                         fill
+                        unoptimized
                         className="object-cover"
                         sizes="(max-width: 768px) 100vw, 33vw"
                       />

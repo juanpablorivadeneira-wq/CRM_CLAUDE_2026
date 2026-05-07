@@ -8,6 +8,7 @@ import { getTenantContext } from '@/lib/tenant';
 import { hasPermission } from '@/lib/permissions';
 import { PageHeader } from '@/components/page-header';
 import { DeleteProjectButton } from './_components/delete-project-button';
+import { ProjectFormDialog } from '../_components/project-form-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,13 @@ export default async function ProjectDetailPage({
   });
 
   if (!project || project.orgId !== ctx.orgId) notFound();
+
+  const projectTypes = canEdit
+    ? await db.projectType.findMany({
+        where: { orgId: ctx.orgId, isActive: true },
+        orderBy: { name: 'asc' },
+      })
+    : [];
 
   const stageCounts = await db.opportunity.groupBy({
     by: ['stageId'],
@@ -132,18 +140,20 @@ export default async function ProjectDetailPage({
       <PageHeader title="Resumen" description={project.description ?? 'Resumen del proyecto.'}>
         <div className="flex items-center gap-2">
           {canEdit && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0}>
-                  <Button variant="outline" size="sm" disabled>
-                    <Settings className="mr-2 h-4 w-4" /> Editar
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Edición de proyecto disponible próximamente.</p>
-              </TooltipContent>
-            </Tooltip>
+            <ProjectFormDialog
+              mode="edit"
+              projectTypes={projectTypes}
+              project={{
+                id: project.id,
+                name: project.name,
+                projectTypeId: project.projectTypeId,
+                status: project.status,
+                description: project.description,
+                imageUrl: project.imageUrl,
+                address: project.address,
+                referencePrice: project.referencePrice,
+              }}
+            />
           )}
           {canDelete && (
             <DeleteProjectButton
@@ -236,7 +246,7 @@ export default async function ProjectDetailPage({
 
         {project.imageUrl && (
           <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
-            <Image src={project.imageUrl} alt={project.name} fill className="object-cover" sizes="33vw" />
+            <Image src={project.imageUrl} alt={project.name} fill unoptimized className="object-cover" sizes="33vw" />
           </div>
         )}
       </div>
