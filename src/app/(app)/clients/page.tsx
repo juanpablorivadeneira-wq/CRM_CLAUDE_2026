@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ClientsTable } from './_components/clients-table';
 import { CreateClientDialog } from './_components/create-client-dialog';
 import { ExportClientsButton } from './_components/export-clients-button';
-import { ImportClientsDialog } from './_components/import-clients-dialog';
 
 export default async function ClientsPage() {
   const ctx = await getTenantContext();
@@ -28,7 +27,6 @@ export default async function ClientsPage() {
       <PageHeader title="Clientes" description="Directorio unificado de personas y empresas.">
         <div className="flex items-center gap-2">
           {canExport && <ExportClientsButton clients={clients} />}
-          {canCreate && <ImportClientsDialog />}
           {canCreate && <CreateClientDialog />}
         </div>
       </PageHeader>
